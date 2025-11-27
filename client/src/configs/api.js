@@ -1,16 +1,20 @@
 import axios from 'axios';
 
-const isDevelopment = import.meta.env.DEV;
-const baseURL = isDevelopment 
-  ? 'http://localhost:3000/api' 
-  : '/api';
-
+// For production, we'll use relative URLs and let Vercel handle the routing
 const api = axios.create({
-  baseURL,
+  baseURL: '', // Empty base URL for production
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Add /api prefix to all requests in production
+api.interceptors.request.use(config => {
+  if (!config.url.startsWith('http')) {
+    config.url = `/api${config.url.startsWith('/') ? '' : '/'}${config.url}`;
+  }
+  return config;
 });
 
 // Request interceptor for API calls
