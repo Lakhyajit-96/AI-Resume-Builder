@@ -1,14 +1,17 @@
-import axios from 'axios'
+import axios from 'axios';
 
-const isDevelopment = import.meta.env.DEV
+const isDevelopment = import.meta.env.DEV;
 const baseURL = isDevelopment 
-  ? 'http://localhost:3000' 
-  : window.location.origin
+  ? 'http://localhost:3000/api' 
+  : '/api';
 
 const api = axios.create({
-  baseURL: isDevelopment ? baseURL : '',
-  withCredentials: true
-})
+  baseURL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 // Request interceptor for API calls
 api.interceptors.request.use(
