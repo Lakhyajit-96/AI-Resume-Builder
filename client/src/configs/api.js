@@ -9,12 +9,13 @@ const api = axios.create({
   },
 });
 
-// Add /api prefix to all requests in production
+// Add exactly one /api prefix to relative URLs in production
 api.interceptors.request.use(config => {
   if (!config.url.startsWith('http')) {
-    config.url = `/api${config.url.startsWith('/') ? '' : '/'}${config.url}`;
+    const normalizedPath = config.url.replace(/^\/?api\//i, '')
+    config.url = `/api/${normalizedPath}`
   }
-  return config;
+  return config
 });
 
 // Request interceptor for API calls
