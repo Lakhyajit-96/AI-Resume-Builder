@@ -85,21 +85,31 @@ export const updateResume = async (req, res) => {
         const image = req.file;
 
         let resumeDataCopy = JSON.parse(resumeData);
+        // make sure personal_info object always exists so we don't crash on image assignment
+        if (!resumeDataCopy.personal_info || typeof resumeDataCopy.personal_info !== 'object') {
+            resumeDataCopy.personal_info = {};
+        }
 
-        if(image){
+        if (image) {
+            const imageBufferData = fs.createReadStream(image.path);
+            try {
+                const response = await imagekit.files.upload({
+                    file: imageBufferData,
+                    fileName: 'resume.png',
+                    folder: 'user-resumes',
+                    transformation: {
+                        pre: 'w-300, h-300, fo-face, z-0.75' + (removeBackground ? ',e-bgremove' : '')
+                    }
+                });
 
-            const imageBufferData = fs.createReadStream(image.path)
-
-            const response = await imagekit.files.upload({
-                file: imageBufferData,
-                fileName: 'resume.png',
-                folder: 'user-resumes',
-                transformation: {
-                    pre: 'w-300, h-300, fo-face, z-0.75' + (removeBackground ? ',e-bgremove' : '')
+                // only overwrite image if we actually received a valid URL
+                if (response && response.url) {
+                    resumeDataCopy.personal_info.image = response.url;
                 }
-            });
-
-            resumeDataCopy.personal_info.image = response.url;
+            } catch (uploadErr) {
+                // if upload fails, keep existing image and continue with other updates
+                console.warn('Image upload failed, keeping existing avatar:', uploadErr.message || uploadErr);
+            }
         }
 
         const resume = await Resume.findByIdAndUpdate({ _id: resumeId, userId}, resumeDataCopy, {new: true});

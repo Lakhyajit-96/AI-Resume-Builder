@@ -193,8 +193,16 @@ export const uploadResume = async (req, res) => {
         const { resumeText, title } = req.body;
         const userId = req.userId;
 
+        // If we couldn't extract any text on the client (e.g. image-only/scanned PDF),
+        // still create a minimal resume instead of failing the request.
         if (!resumeText) {
-            return res.status(400).json({ message: 'Missing required fields' });
+            const fallbackData = buildFallbackResumeData('');
+            const newResume = await Resume.create({
+                ...fallbackData,
+                title: title?.trim() || 'Imported Resume',
+                userId,
+            });
+            return res.json({ resumeId: newResume._id, parsedWith: 'fallback-empty' });
         }
 
         let parsedData = null;
