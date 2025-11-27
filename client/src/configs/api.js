@@ -1,8 +1,12 @@
 import axios from 'axios'
 
 const isDevelopment = import.meta.env.DEV
+const baseURL = isDevelopment 
+  ? 'http://localhost:3000' 
+  : window.location.origin
+
 const api = axios.create({
-  baseURL: isDevelopment ? 'http://localhost:3000' : '/api',
+  baseURL: isDevelopment ? baseURL : '',
   withCredentials: true
 })
 
