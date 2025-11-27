@@ -34,66 +34,100 @@ const buildFallbackResumeData = (resumeText = '') => {
     };
 };
 
+const extractionInstructions = `You are an expert AI Agent. Extract every possible resume detail and return ONLY valid JSON matching this schema:
+{
+  professional_summary: string,
+  skills: string[],
+  personal_info: {
+    full_name: string,
+    image: string,
+    email: string,
+    phone: string,
+    location: string,
+    profession: string,
+    linkedin: string,
+    website: string,
+  },
+  experience: [{ position: string, company: string, start_date: string, end_date: string, description: string, is_current: boolean }],
+  project: [{ name: string, type: string, description: string }],
+  education: [{ institution: string, degree: string, field: string, graduation_date: string, gpa: string }]
+}`;
+
+const callGeminiExtraction = async (resumeText) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    const model = process.env.OPENAI_MODEL;
+    if (!apiKey || !model) {
+        return null;
+    }
+
+    const base = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
+    const normalizedModel = model.startsWith('models/') ? model : `models/${model}`;
+    const endpoint = `${base}/${normalizedModel}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        {
+                            text: `${extractionInstructions}\nResume Content:\n${resumeText}`,
+                        },
+                    ],
+                },
+            ],
+            generationConfig: {
+                responseMimeType: 'application/json',
+            },
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Gemini extraction failed: ${response.status} ${response.statusText}`);
+    }
+
+    const payload = await response.json();
+    const content = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) {
+        throw new Error('Gemini extraction returned empty content');
+    }
+    return JSON.parse(content);
+};
+
 const extractResumeDataWithAI = async (resumeText) => {
     if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) {
         return { data: null, source: 'fallback' };
     }
 
     const systemPrompt = 'You are an expert AI Agent to extract data from resume.';
-    const userPrompt = `extract data from this resume: ${resumeText} 
-        Provide data in the following JSON format with no additional text before or after:
-        {
-        professional_summary: {type: String, default: ""},
-        skills: [{type: String}],
-        personal_info: {
-            full_name: {type: String, default: ""},
-            image: {type: String, default: ""},
-            email: {type: String, default: ""},
-            phone: {type: String, default: ""},
-            location: {type: String, default: ""},
-            profession: {type: String, default: ""},
-            linkedin: {type: String, default: ""},
-            website: {type: String, default: ""},
-        },
-        experience: [
-            {
-                position: {type: String},
-                company: {type: String},
-                start_date: {type: String},
-                end_date: {type: String},
-                description: {type: String},
-                is_current: {type: Boolean},
-            }
-        ],
-        project: [
-            {
-                name: {type: String},
-                type: {type: String},
-                description: {type: String},
-            }
-        ],
-        education: [
-            {
-                institution: {type: String},
-                degree: {type: String},
-                field: {type: String},
-                graduation_date: {type: String},
-                gpa: {type: String},
-            }
-        ],
-        }`;
+    const userPrompt = `${extractionInstructions}\nResume Content:\n${resumeText}`;
 
-    const response = await ai.chat.completions.create({
-        model: process.env.OPENAI_MODEL,
-        messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-    });
+    try {
+        const response = await ai.chat.completions.create({
+            model: process.env.OPENAI_MODEL,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            response_format: { type: 'json_object' },
+        });
 
-    const extractedData = response.choices[0].message.content;
-    return { data: JSON.parse(extractedData), source: 'ai' };
+        const extractedData = response.choices[0].message.content;
+        return { data: JSON.parse(extractedData), source: 'openai' };
+    } catch (openAIError) {
+        console.warn('OpenAI compatible extraction failed, attempting Gemini:', openAIError.message);
+        try {
+            const geminiData = await callGeminiExtraction(resumeText);
+            if (geminiData) {
+                return { data: geminiData, source: 'gemini' };
+            }
+        } catch (geminiError) {
+            console.warn('Gemini extraction failed:', geminiError.message);
+        }
+        return { data: null, source: 'fallback' };
+    }
 };
 
 // controller for enhancing a resume's professional summary
