@@ -15,6 +15,7 @@ import jobsRouter from './routes/jobsRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const BODY_LIMIT = process.env.BODY_LIMIT || '10mb';
 
 // Database connection
 try {
@@ -23,7 +24,8 @@ try {
     console.error('Database connection failed. Server will continue running without DB:', err.message || err);
 }
 
-app.use(express.json());
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 app.use(cors());
 
 app.get('/', (req, res)=> res.send("Server is live..."))
