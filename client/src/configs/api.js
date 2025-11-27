@@ -1,10 +1,39 @@
 import axios from 'axios'
 
-// Default to the backend server at localhost:3000 if VITE_API_URL is not provided.
-// The server's default PORT in server/server.js is 3000, so this helps avoid 404s
-// when the frontend is served from a different origin during development.
+const isDevelopment = import.meta.env.DEV
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  baseURL: isDevelopment ? 'http://localhost:3000' : '/api',
+  withCredentials: true
 })
+
+// Request interceptor for API calls
+api.interceptors.request.use(
+  (config) => {
+    // You can add auth headers here if needed
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Response interceptor for API calls
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error('API Error:', error.response.data)
+    } else if (error.request) {
+      console.error('No response received:', error.request)
+    } else {
+      console.error('Error:', error.message)
+    }
+    return Promise.reject(error)
+  }
+)
 
 export default api
