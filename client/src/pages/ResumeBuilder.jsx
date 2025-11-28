@@ -207,12 +207,20 @@ const ResumeBuilder = () => {
 
             const { data } = await api.put('/api/resumes/update', formData, { headers: { Authorization: token }});
             if(data?.resume){
-                cleanupPreviewUrl();
-                setAvatarFile(null);
-                setResumeData({
+                // Only cleanup preview URL if we actually uploaded a new file
+                if(imageFile){
+                    cleanupPreviewUrl();
+                    setAvatarFile(null);
+                }
+                const updatedResume = {
                     ...data.resume,
-                    personal_info: data.resume.personal_info || {}
-                });
+                    personal_info: {
+                        ...(data.resume.personal_info || {}),
+                        // Always use server response image if available, otherwise preserve current
+                        image: data.resume.personal_info?.image || resumeData.personal_info?.image || ''
+                    }
+                };
+                setResumeData(updatedResume);
             }
             if(shouldRemoveBg){
                 setRemoveBackground(false);
@@ -230,7 +238,14 @@ const ResumeBuilder = () => {
     useEffect(()=>{
         const hasProcessableImage = avatarFile || resumeData.personal_info?.image;
         if(removeBackground && hasProcessableImage){
-            saveResume({ silent: true, forceBackgroundProcessing: true });
+            // Only process if we have a file to upload or a valid image URL
+            const currentImage = resumeData.personal_info?.image;
+            if(avatarFile || (currentImage && !currentImage.startsWith('blob:'))){
+                saveResume({ silent: true, forceBackgroundProcessing: true });
+            } else {
+                // If only blob URL exists, don't process (user needs to upload first)
+                setRemoveBackground(false);
+            }
         }
     },[avatarFile, removeBackground, resumeData.personal_info?.image, saveResume])
 

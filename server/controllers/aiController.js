@@ -218,18 +218,25 @@ export const uploadResume = async (req, res) => {
                 resumeText = await extractTextFromFile(req.file);
             }
         } catch (fileErr) {
+            console.error('File extraction error:', fileErr);
+            if (req.file?.path) {
+                await fs.unlink(req.file.path).catch(()=>{});
+            }
             return res.status(400).json({ message: fileErr.message });
         } finally {
             if (req.file?.path) {
-                fs.unlink(req.file.path).catch(()=>{});
+                await fs.unlink(req.file.path).catch(()=>{});
             }
         }
 
         resumeText = resumeText?.toString().trim();
 
+        console.log('Extracted resume text length:', resumeText?.length || 0);
+
         // If we couldn't extract any text on the client (e.g. image-only/scanned PDF),
         // still create a minimal resume instead of failing the request.
         if (!resumeText) {
+            console.warn('No text extracted from resume file');
             const fallbackData = buildFallbackResumeData('');
             const newResume = await Resume.create({
                 ...fallbackData,
@@ -246,13 +253,35 @@ export const uploadResume = async (req, res) => {
             const aiResult = await extractResumeDataWithAI(resumeText);
             parsedData = aiResult.data;
             source = aiResult.source;
+            console.log('AI extraction result:', { source, hasData: !!parsedData });
         } catch (aiError) {
             console.warn('AI extraction failed, using fallback parser:', aiError.message);
         }
 
         if (!parsedData) {
+            console.log('Using fallback parser for resume extraction');
             parsedData = buildFallbackResumeData(resumeText);
         }
+
+        // Ensure parsedData has the correct structure
+        if (!parsedData.personal_info || typeof parsedData.personal_info !== 'object') {
+            parsedData.personal_info = parsedData.personal_info || {};
+        }
+        if (!Array.isArray(parsedData.experience)) {
+            parsedData.experience = parsedData.experience || [];
+        }
+        if (!Array.isArray(parsedData.education)) {
+            parsedData.education = parsedData.education || [];
+        }
+        if (!Array.isArray(parsedData.project)) {
+            parsedData.project = parsedData.project || [];
+        }
+        if (!Array.isArray(parsedData.skills)) {
+            parsedData.skills = parsedData.skills || [];
+        }
+
+        console.log('Final parsed data keys:', Object.keys(parsedData || {}));
+        console.log('Personal info keys:', Object.keys(parsedData.personal_info || {}));
 
         const newResume = await Resume.create({
             ...parsedData,

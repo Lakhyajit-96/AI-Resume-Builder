@@ -98,20 +98,27 @@ export const updateResume = async (req, res) => {
             resumeDataCopy.personal_info = {};
         }
 
-        const resume = await Resume.findOne({ _id: resumeId, userId });
-        if (!resume) {
+        // Store existing image before any modifications
+        let existingImage = null;
+        
+        // Use findOneAndUpdate for atomic check-and-update to prevent race conditions
+        // First, fetch existing resume to get current image
+        const existingResume = await Resume.findOne({ _id: resumeId, userId });
+        if (!existingResume) {
             return res.status(404).json({ message: 'Resume not found' });
         }
-
-        const existingImage = resume.personal_info?.image;
+        
+        existingImage = existingResume.personal_info?.image;
         const personalInfo = resumeDataCopy.personal_info;
         const userProvidedImageField = Object.prototype.hasOwnProperty.call(personalInfo, 'image');
 
-        if (!userProvidedImageField && typeof existingImage !== 'undefined') {
+        // Always preserve existing image unless explicitly removed or replaced
+        if (!userProvidedImageField && existingImage) {
             personalInfo.image = existingImage;
         }
 
         if (image) {
+            // New image file provided - attempt upload
             const imageBufferData = fs.createReadStream(image.path);
             try {
                 const response = await imagekit.files.upload({
@@ -125,21 +132,26 @@ export const updateResume = async (req, res) => {
 
                 if (response && response.url) {
                     personalInfo.image = response.url;
-                } else if (!userProvidedImageField && typeof existingImage !== 'undefined') {
-                    personalInfo.image = existingImage;
+                } else {
+                    // Upload succeeded but no URL returned - preserve existing image
+                    personalInfo.image = existingImage || personalInfo.image || '';
                 }
             } catch (uploadErr) {
                 console.warn('Image upload failed, keeping existing avatar:', uploadErr.message || uploadErr);
-                if (!userProvidedImageField && typeof existingImage !== 'undefined') {
-                    personalInfo.image = existingImage;
-                }
+                // Always preserve existing image on upload failure - never delete when upload was attempted
+                personalInfo.image = existingImage || personalInfo.image || '';
             }
-        } else if (!userProvidedImageField && typeof existingImage === 'undefined') {
-            delete personalInfo.image;
-        }
-
-        if (typeof personalInfo.image === 'undefined') {
-            delete personalInfo.image;
+        } else {
+            // No new image file uploaded - only delete if user explicitly removed it
+            // This check ensures we only delete when !image (no upload was attempted)
+            if (userProvidedImageField && (!personalInfo.image || personalInfo.image === '')) {
+                // User explicitly removed image (sent empty/null) AND no file was uploaded
+                delete personalInfo.image;
+            } else if (!userProvidedImageField && existingImage) {
+                // User didn't touch image field - preserve existing
+                personalInfo.image = existingImage;
+            }
+            // If userProvidedImageField is true and personalInfo.image has a value, keep it
         }
 
         delete resumeDataCopy._id;
@@ -148,10 +160,19 @@ export const updateResume = async (req, res) => {
         delete resumeDataCopy.createdAt;
         delete resumeDataCopy.updatedAt;
 
-        resume.set(resumeDataCopy);
-        await resume.save();
+        // Use findOneAndUpdate for atomic operation to prevent race conditions
+        // If resume is deleted between check and update, this will return null
+        const updatedResume = await Resume.findOneAndUpdate(
+            { _id: resumeId, userId },
+            { $set: resumeDataCopy },
+            { new: true, runValidators: true }
+        );
 
-        return res.status(200).json({message: 'Saved successfully', resume});
+        if (!updatedResume) {
+            return res.status(404).json({ message: 'Resume not found or was deleted' });
+        }
+
+        return res.status(200).json({message: 'Saved successfully', resume: updatedResume});
     } catch (error) {
         return res.status(400).json({message: error.message})
     } finally {
