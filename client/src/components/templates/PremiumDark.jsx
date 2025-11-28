@@ -18,7 +18,12 @@ const PremiumDark = ({ data = {}, accentColor = '#3B82F6' }) => {
             <p className="text-sm text-gray-300">{data.personal_info?.profession}</p>
           </div>
           {data.personal_info?.image && (
-            <img src={data.personal_info.image} alt="profile" className="w-20 h-20 rounded-full object-cover border-2" style={{ borderColor: accentColor }} />
+            <img
+              src={data.personal_info.image}
+              alt="profile"
+              className="w-20 h-20 rounded-full object-cover object-center border-2"
+              style={{ borderColor: accentColor }}
+            />
           )}
         </div>
 

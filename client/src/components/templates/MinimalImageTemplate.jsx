@@ -15,17 +15,15 @@ const MinimalImageTemplate = ({ data, accentColor }) => {
             <div className="grid grid-cols-3">
 
                 <div className="col-span-1  py-10">
-                    {/* Image */}
-                    {data.personal_info?.image && typeof data.personal_info.image === 'string' ? (
-                        <div className="mb-6">
-                            <img src={data.personal_info.image} alt="Profile" className="w-32 h-32 object-cover rounded-full mx-auto" style={{ background: accentColor+'70' }} />
+                    {data.personal_info?.image && (
+                        <div className="mb-6 flex items-center justify-center">
+                            <img
+                                src={data.personal_info.image}
+                                alt="Profile"
+                                className="w-32 h-32 object-cover object-center rounded-full mx-auto ring-1 ring-zinc-200"
+                                style={{ background: accentColor+'70' }}
+                            />
                         </div>
-                    ) : (
-                        data.personal_info?.image && typeof data.personal_info.image === 'object' ? (
-                            <div className="mb-6">
-                                <img src={URL.createObjectURL(data.personal_info.image)} alt="Profile" className="w-32 h-32 object-cover rounded-full mx-auto" style={{ background: accentColor+'70' }} />
-                            </div>
-                        ) : null
                     )}
                 </div>
 

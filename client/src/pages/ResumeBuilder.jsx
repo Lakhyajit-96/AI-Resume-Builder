@@ -1,10 +1,7 @@
-import React from 'react'
-import { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { dummyResumeData } from "../assets/assets.js";
-import { useEffect } from 'react';
 import api from "../configs/api.js";
-import { useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import {
     ArrowLeftIcon, User, FileText, Briefcase, GraduationCap, FolderIcon, Sparkles, ChevronLeftIcon,
@@ -39,6 +36,20 @@ const ResumeBuilder = () => {
         public: false,
     })
 
+    const [activeSectionIndex, setActiveSectionIndex] = useState(0)
+    const [removeBackground, setRemoveBackground] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [hasEntitlement, setHasEntitlement] = useState(false);
+    const [avatarFile, setAvatarFile] = useState(null);
+    const previewUrlRef = useRef(null);
+
+    const cleanupPreviewUrl = useCallback(()=>{
+        if(previewUrlRef.current){
+            URL.revokeObjectURL(previewUrlRef.current);
+            previewUrlRef.current = null;
+        }
+    },[])
+
     // remove standalone loadExistingResume and call it inside useEffect to satisfy hooks lint rule
 
     useEffect(()=>{
@@ -49,8 +60,14 @@ const ResumeBuilder = () => {
                 if (token) {
                     const { data } = await api.get(`/api/resumes/get/${resumeId}`, { headers: { Authorization: token } })
                     if (data?.resume) {
-                        setResumeData(data.resume)
-                        document.title = data.resume.title || 'Resume Builder'
+                        cleanupPreviewUrl();
+                        setAvatarFile(null);
+                        const normalizedResume = {
+                            ...data.resume,
+                            personal_info: data.resume.personal_info || {}
+                        };
+                        setResumeData(normalizedResume)
+                        document.title = normalizedResume.title || 'Resume Builder'
                         return
                     }
                 }
@@ -61,7 +78,12 @@ const ResumeBuilder = () => {
             // Fallback: try from dummy data (keeps previous behavior for non-auth flows)
             const resume = dummyResumeData.find(resume => resume._id === resumeId)
             if(resume){
-                setResumeData(resume)
+                cleanupPreviewUrl();
+                setAvatarFile(null);
+                setResumeData({
+                    ...resume,
+                    personal_info: resume.personal_info || {}
+                })
                 document.title = resume.title
             } else {
                 // if no resume loaded, attempt to apply locally saved template
@@ -81,7 +103,11 @@ const ResumeBuilder = () => {
             }
         }
         loadExistingResume()
-    },[resumeId])
+    },[resumeId, cleanupPreviewUrl])
+
+    useEffect(()=>{
+        return ()=> cleanupPreviewUrl()
+    },[cleanupPreviewUrl])
 
     useEffect(()=>{
         const token = localStorage.getItem('token')
@@ -95,10 +121,30 @@ const ResumeBuilder = () => {
         run()
     },[])
 
-    const [activeSectionIndex, setActiveSectionIndex] = useState(0)
-    const [removeBackground, setRemoveBackground] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [hasEntitlement, setHasEntitlement] = useState(false);
+    const handleAvatarSelect = useCallback((file)=>{
+        cleanupPreviewUrl()
+        if(!file){
+            setAvatarFile(null)
+            setResumeData(prev => ({
+                ...prev,
+                personal_info: {
+                    ...(prev.personal_info || {}),
+                    image: ''
+                }
+            }))
+            return
+        }
+        const previewUrl = URL.createObjectURL(file)
+        previewUrlRef.current = previewUrl
+        setAvatarFile(file)
+        setResumeData(prev => ({
+            ...prev,
+            personal_info: {
+                ...(prev.personal_info || {}),
+                image: previewUrl
+            }
+        }))
+    },[cleanupPreviewUrl])
 
     const sections = [
         { id: "personal", name: "Personal Info", icon: User },
@@ -110,6 +156,83 @@ const ResumeBuilder = () => {
     ]
 
     const activeSection = sections[activeSectionIndex]
+
+    useEffect(()=>{
+        const hasProcessableImage = avatarFile || resumeData.personal_info?.image;
+        if(removeBackground && hasProcessableImage){
+            saveResume({ silent: true, forceBackgroundProcessing: true });
+        }
+    },[avatarFile, removeBackground, resumeData.personal_info?.image, saveResume])
+
+    const saveResume = useCallback(async ({ silent = false, forceBackgroundProcessing = false } = {})=>{
+        if(isSaving) return;
+        const token = localStorage.getItem('token');
+        if(!token){
+            toast.error('Please log in to save your resume');
+            return;
+        }
+        const shouldRemoveBg = forceBackgroundProcessing ? true : removeBackground;
+        try{
+            setIsSaving(true);
+            const formData = new FormData();
+            const payload = JSON.parse(JSON.stringify({
+                ...resumeData,
+                personal_info: { ...(resumeData.personal_info || {}) }
+            }));
+            if(payload.personal_info?.image){
+                const previewValue = payload.personal_info.image;
+                if(previewValue.startsWith('blob:') || previewValue.startsWith('data:')){
+                    delete payload.personal_info.image;
+                }
+            }
+            delete payload._id;
+            delete payload.userId;
+            delete payload.__v;
+            delete payload.createdAt;
+            delete payload.updatedAt;
+            formData.append('resumeId', resumeId);
+            formData.append('resumeData', JSON.stringify(payload));
+
+            let imageFile = avatarFile;
+            const currentImage = resumeData.personal_info?.image;
+            if(!imageFile && shouldRemoveBg && currentImage){
+                try{
+                    const response = await fetch(currentImage);
+                    const blob = await response.blob();
+                    imageFile = new File([blob], 'resume-avatar.png', { type: blob.type || 'image/png' });
+                }catch(fetchErr){
+                    console.warn('Failed to refetch avatar for background removal', fetchErr);
+                }
+            }
+
+            if(imageFile){
+                formData.append('image', imageFile);
+                if(shouldRemoveBg){
+                    formData.append('removeBackground', 'true');
+                }
+            }
+
+            const { data } = await api.put('/api/resumes/update', formData, { headers: { Authorization: token }});
+            if(data?.resume){
+                cleanupPreviewUrl();
+                setAvatarFile(null);
+                setResumeData({
+                    ...data.resume,
+                    personal_info: data.resume.personal_info || {}
+                });
+            }
+            if(shouldRemoveBg){
+                setRemoveBackground(false);
+            }
+            if(!silent){
+                toast.success(data?.message || 'Saved successfully');
+            }
+        }catch(error){
+            toast.error(error?.response?.data?.message || error.message || 'Failed to save');
+        }finally{
+            setIsSaving(false);
+        }
+    },[avatarFile, cleanupPreviewUrl, isSaving, removeBackground, resumeData, resumeId])
 
     const changeResumeVisibility = async () => {
         setResumeData({...resumeData, public: !resumeData.public})
@@ -132,9 +255,12 @@ const ResumeBuilder = () => {
         }
     }
 
-    const downloadResume = () => {
-        // track download event
+    const downloadResume = async () => {
         try{ api.post('/api/analytics/track', { resumeId, event: 'download', meta: { route: 'builder' } }) }catch(e){}
+        const isLocalPreview = resumeData.personal_info?.image?.startsWith?.('blob:');
+        if(isLocalPreview && !isSaving){
+            await saveResume({ silent: true });
+        }
         window.print();
     }
 
@@ -190,8 +316,14 @@ const ResumeBuilder = () => {
                             {/* Form Content - moved inside the white panel so it appears under the Next button */}
                             <div className="space-y-6 mt-4">
                                 {activeSection.id === 'personal' && (
-                                    <PersonalInfoForm data={resumeData.personal_info}
-                                onChange={(data) => setResumeData(prev => ({...prev, personal_info: data}))} removeBackground={removeBackground} setRemoveBackground={setRemoveBackground} />
+                                    <PersonalInfoForm
+                                        data={resumeData.personal_info}
+                                        onChange={(data) => setResumeData(prev => ({...prev, personal_info: data}))}
+                                        removeBackground={removeBackground}
+                                        setRemoveBackground={setRemoveBackground}
+                                        onImageSelect={handleAvatarSelect}
+                                        accentColor={resumeData.accent_color}
+                                    />
                                 )}
                                 {activeSection.id === 'summary' && (
                                    <ProfessionalSummaryForm data={resumeData.professional_summary} onChange={(data)=> setResumeData(prev=> ({...prev, professional_summary: data}))} setResumeData={setResumeData}/>
@@ -209,41 +341,7 @@ const ResumeBuilder = () => {
                                     <SkillsForm data={resumeData.skills} onChange={(data)=> setResumeData(prev=> ({...prev, skills: data}))} />
                                 )}
                             </div>
-                            <button onClick={async ()=>{
-                                if(isSaving) return;
-                                try{
-                                    setIsSaving(true);
-                                    const token = localStorage.getItem('token');
-                                    const formData = new FormData();
-                                    const dataToSend = {
-                                        ...resumeData,
-                                        personal_info: { ...(resumeData.personal_info || {}) }
-                                    };
-                                    let imageFile = null;
-                                    if(dataToSend.personal_info && typeof dataToSend.personal_info.image === 'object'){
-                                        imageFile = dataToSend.personal_info.image;
-                                        delete dataToSend.personal_info.image;
-                                    }
-                                    formData.append('resumeId', resumeId);
-                                    formData.append('resumeData', JSON.stringify(dataToSend));
-                                    if(imageFile){
-                                        formData.append('image', imageFile);
-                                        if(removeBackground){
-                                            formData.append('removeBackground', 'true');
-                                        }
-                                    }
-                                    const { data } = await api.put('/api/resumes/update', formData, { headers: { Authorization: token }});
-                                    if(data?.resume){
-                                        setResumeData(data.resume);
-                                        setRemoveBackground(false);
-                                    }
-                                    toast.success(data?.message || 'Saved successfully');
-                                }catch(error){
-                                    toast.error(error?.response?.data?.message || error.message || 'Failed to save');
-                                }finally{
-                                    setIsSaving(false);
-                                }
-                            }} disabled={isSaving} className={`bg-gradient-to-br from-green-100 to-green-200 ring-green-300 text-green-600 ring hover:ring-green-400 transition-all rounded-md px-6 py-2 mt-6 text-sm inline-flex items-center gap-2 ${isSaving ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                            <button onClick={()=> saveResume()} disabled={isSaving} className={`bg-gradient-to-br from-green-100 to-green-200 ring-green-300 text-green-600 ring hover:ring-green-400 transition-all rounded-md px-6 py-2 mt-6 text-sm inline-flex items-center gap-2 ${isSaving ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                 {isSaving && <LoaderCircleIcon className="size-4 animate-spin" />}
                                 {isSaving ? 'Saving…' : 'Save Changes'}
                             </button>

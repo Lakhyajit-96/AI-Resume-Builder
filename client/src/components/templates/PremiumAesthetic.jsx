@@ -15,7 +15,12 @@ const PremiumAesthetic = ({ data = {}, accentColor = '#8B5CF6' }) => {
           <p className="text-sm text-gray-600">{data.personal_info?.profession}</p>
         </div>
         {data.personal_info?.image && (
-          <img src={data.personal_info.image} alt="profile" className="w-20 h-20 rounded-full object-cover border-2" style={{ borderColor: accentColor }} />
+          <img
+            src={data.personal_info.image}
+            alt="profile"
+            className="w-20 h-20 rounded-full object-cover object-center border-2"
+            style={{ borderColor: accentColor }}
+          />
         )}
       </div>
 

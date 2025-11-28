@@ -13,7 +13,12 @@ const PremiumCreative = ({ data = {}, accentColor = '#3B82F6' }) => {
       <div className="flex items-start gap-6 mb-6">
         <div className="flex-shrink-0">
           {data.personal_info?.image && (
-            <img src={data.personal_info.image} alt="profile" className="w-24 h-24 rounded-full object-cover border-4" style={{ borderColor: accentColor }} />
+            <img
+              src={data.personal_info.image}
+              alt="profile"
+              className="w-24 h-24 rounded-full object-cover object-center border-4"
+              style={{ borderColor: accentColor }}
+            />
           )}
         </div>
         <div>

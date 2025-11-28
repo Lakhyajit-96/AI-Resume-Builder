@@ -1,5 +1,9 @@
 import ai from '../configs/ai.js';
 import Resume from '../models/Resume.js';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
+import fs from 'fs/promises';
+import path from 'path';
 
 const buildFallbackResumeData = (resumeText = '') => {
     const lines = resumeText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -97,6 +101,21 @@ const callGeminiExtraction = async (resumeText) => {
 };
 
 const extractResumeDataWithAI = async (resumeText) => {
+const extractTextFromFile = async (file) => {
+    if (!file) return '';
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const buffer = await fs.readFile(file.path);
+    if (ext === '.pdf') {
+        const parsed = await pdfParse(buffer);
+        return parsed?.text || '';
+    }
+    if (ext === '.docx') {
+        const result = await mammoth.extractRawText({ buffer });
+        return result?.value || '';
+    }
+    throw new Error('Unsupported file format. Please upload a PDF or DOCX resume.');
+};
+
     if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) {
         return { data: null, source: 'fallback' };
     }
@@ -190,8 +209,23 @@ export const enhanceJobDescription = async (req, res) => {
 // POST: /api/ai/upload-resume
 export const uploadResume = async (req, res) => {
     try {
-        const { resumeText, title } = req.body;
+        const { resumeText: incomingText, title } = req.body;
         const userId = req.userId;
+        let resumeText = incomingText;
+
+        try {
+            if (req.file) {
+                resumeText = await extractTextFromFile(req.file);
+            }
+        } catch (fileErr) {
+            return res.status(400).json({ message: fileErr.message });
+        } finally {
+            if (req.file?.path) {
+                fs.unlink(req.file.path).catch(()=>{});
+            }
+        }
+
+        resumeText = resumeText?.toString().trim();
 
         // If we couldn't extract any text on the client (e.g. image-only/scanned PDF),
         // still create a minimal resume instead of failing the request.

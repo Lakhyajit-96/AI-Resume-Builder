@@ -13,7 +13,11 @@ const PremiumCard = ({ data = {}, accentColor = '#3B82F6' }) => {
       <div className="grid grid-cols-3 gap-6 mb-6">
         <div className="col-span-1">
           {data.personal_info?.image && (
-            <img src={data.personal_info.image} alt="profile" className="w-full h-40 object-cover rounded-md mb-4" />
+            <img
+              src={data.personal_info.image}
+              alt="profile"
+              className="w-full h-40 object-cover object-center rounded-md mb-4"
+            />
           )}
           <h2 className="text-xl font-semibold">{data.personal_info?.full_name || 'Your Name'}</h2>
           <p className="text-sm text-gray-600">{data.personal_info?.profession}</p>

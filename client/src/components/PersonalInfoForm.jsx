@@ -1,13 +1,24 @@
 import React from 'react'
-import {User, UserIcon, Mail, Phone, MapPin, BriefcaseBusiness, Linkedin, Globe} from "lucide-react";
+import {User, Mail, Phone, MapPin, BriefcaseBusiness, Linkedin, Globe} from "lucide-react";
 
-// Repaired component: fixed broken input onChange, removed duplicate/invalid returns,
-// added safe defaults for props so accessing `data.*` won't throw, and preserved
-// the original structure and styles as much as possible.
-const PersonalInfoForm = ({data = {}, onChange = ()=>{}, removeBackground, setRemoveBackground}) => {
+const PersonalInfoForm = ({
+                              data = {},
+                              onChange = ()=>{},
+                              removeBackground = false,
+                              setRemoveBackground = ()=>{},
+                              onImageSelect = ()=>{},
+                              accentColor = '#e2e8f0'
+                          }) => {
 
     const handleChange = (field, value)=>{
         onChange({...data, [field]: value})
+    }
+
+    const handleFileChange = (event)=>{
+        const file = event.target.files?.[0] || null;
+        onImageSelect(file);
+        // reset the input so selecting the same file twice still triggers change
+        event.target.value = '';
     }
 
     const fields = [
@@ -20,32 +31,48 @@ const PersonalInfoForm = ({data = {}, onChange = ()=>{}, removeBackground, setRe
         {key: "website", label: "Personal Website", type: "url", icon: Globe},
     ]
 
+    const hasImage = Boolean(data.image);
+
     return (
         <div className="space-y-4">
-            {/* Removed Full Name input as requested; kept avatar/upload and text within the box */}
-
             <div>
                 <h3 className="text-lg font-semibold text-gray-900">Personal Information</h3>
                 <p className="text-sm text-gray-600">Get Started with the personal information</p>
-                <div className="flex items-center gap-2 mt-3">
-                    <label className="cursor-pointer">
-                        {data.image ? (
-                            <img src={typeof data.image === 'string' ? data.image : URL.createObjectURL(data.image)} alt="user image" className="w-16 h-16 rounded-full object-cover mt-5 ring ring-slate-300 hover:opacity-80" />
+                <div className="flex items-center gap-4 mt-3 flex-wrap">
+                    <label className="cursor-pointer flex items-center gap-3">
+                        {hasImage ? (
+                            <div className="relative">
+                                <img
+                                    src={data.image}
+                                    alt="user avatar"
+                                    className="w-20 h-20 rounded-full object-cover object-center ring ring-slate-200 hover:opacity-90 transition-all duration-200"
+                                    style={{ backgroundColor: removeBackground ? accentColor : '#f8fafc' }}
+                                />
+                                <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[11px] text-slate-500 bg-white px-2 rounded-full shadow">Change</span>
+                            </div>
                         ) : (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 text-slate-600">
                                 <User className="size-10 p-2.5 border rounded-full" />
-                                <span className="text-sm text-gray-600">upload user image</span>
+                                <span className="text-sm">Upload user image</span>
                             </div>
                         )}
-                        <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={(e)=>handleChange("image", e.target.files?.[0] || null)} />
+                        <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleFileChange} />
                     </label>
-                    {typeof data.image === 'object' && (
-                        <div className="flex flex-col gap-1 pl-4 text-sm">
-                            <p>Remove Background</p>
-                            <label className="relative inline-flex items-center cursor-pointer text-gray-900 gap-3">
-                                <input type="checkbox" className="sr-only peer" onChange={()=>setRemoveBackground && setRemoveBackground(prev => !prev)} checked={!!removeBackground} />
-                                <div className="w-9 h-5 bg-slate-300 rounded-full peer peer-checked:bg-green-600 transition-colors duration-200"></div>
-                                <span className="dot absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200 ease-in-out peer-checked:translate-x-4"></span>
+                    {hasImage && (
+                        <div className="flex flex-col gap-1 text-sm text-gray-700">
+                            <p className="font-medium">Remove Background</p>
+                            <label className="inline-flex items-center cursor-pointer gap-3">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        onChange={()=> setRemoveBackground(prev => !prev)}
+                                        checked={!!removeBackground}
+                                    />
+                                    <div className="w-10 h-5 bg-slate-300 rounded-full peer-checked:bg-green-600 transition-colors duration-200"></div>
+                                    <span className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200 ease-in-out peer-checked:translate-x-5"></span>
+                                </div>
+                                <span className="text-xs text-slate-500">Instantly align & blend avatar</span>
                             </label>
                         </div>
                     )}

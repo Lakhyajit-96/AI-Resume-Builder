@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { toast } from "react-hot-toast";
 import api from '../configs/api.js'
-import pdfToText from "react-pdftotext"
 
 const Dashboard = () => {
 
@@ -14,11 +13,12 @@ const Dashboard = () => {
   const [allResumes, setAllResumes] = useState([])
   const [showCreateResume, setShowCreateResume] = useState(false)
   const [showUploadResume, setShowUploadResume] = useState(false)
-  const [title, setTitle] = useState('')
+  const [createTitle, setCreateTitle] = useState('')
   // separate title for upload modal so the create flow and upload flow don't interfere
   const [uploadTitle, setUploadTitle] = useState('')
   const [selectedFile, setSelectedFile] = useState(null)
   const [editResumeId, setEditResumeId] = useState('')
+  const [editTitle, setEditTitle] = useState('')
 
   const [isLoading, setIsLoading] = useState(false)
 
@@ -38,10 +38,10 @@ const Dashboard = () => {
     // prefer backend create when token is available
     if (token) {
       try {
-        const { data } = await api.post('/api/resumes/create', { title }, { headers: { Authorization: token } })
+        const { data } = await api.post('/api/resumes/create', { title: createTitle }, { headers: { Authorization: token } })
         if (data?.resume) {
           setAllResumes(prev => [...prev, data.resume])
-          setTitle('')
+          setCreateTitle('')
           setShowCreateResume(false)
           navigate(`/app/builder/${data.resume._id}`)
           return
@@ -53,9 +53,9 @@ const Dashboard = () => {
     }
 
     // fallback local create (keeps behavior if backend isn't reachable)
-    const newResume = { _id: Date.now().toString(), title: title || 'Untitled Resume', updatedAt: new Date().toISOString() }
+    const newResume = { _id: Date.now().toString(), title: createTitle || 'Untitled Resume', updatedAt: new Date().toISOString() }
     setAllResumes(prev => [...prev, newResume])
-    setTitle('')
+    setCreateTitle('')
     setShowCreateResume(false)
     navigate(`/app/builder/${newResume._id}`)
   }
@@ -72,23 +72,16 @@ const Dashboard = () => {
       return
     }
 
+    const formData = new FormData()
+    formData.append('title', uploadTitle.trim())
+    formData.append('resume', selectedFile)
+
     setIsLoading(true)
     try {
-      let resumeText = ''
-      const name = selectedFile.name.toLowerCase()
+      const { data } = await api.post('/api/ai/upload-resume', formData, {
+        headers: { Authorization: token, 'Content-Type': 'multipart/form-data' },
+      })
 
-      if (name.endsWith('.pdf')) {
-        // Extract text from PDF in the browser
-        resumeText = await pdfToText(selectedFile)
-      } else {
-        toast.error('Only PDF files are supported for upload at the moment.')
-        setIsLoading(false)
-        return
-      }
-
-      const { data } = await api.post('/api/ai/upload-resume', { title: uploadTitle.trim(), resumeText }, { headers: { Authorization: token }})
-
-      // reset state and navigate to builder
       setUploadTitle('')
       setSelectedFile(null)
       setShowUploadResume(false)
@@ -101,15 +94,15 @@ const Dashboard = () => {
     }
   }
 
-  const editTitle = async (event) => {
+  const updateTitle = async (event) => {
         try {
             event.preventDefault()
             const formData = new FormData();
                         formData.append('resumeId', editResumeId);
-                        formData.append('resumeData', JSON.stringify({ title }));
+                        formData.append('resumeData', JSON.stringify({ title: editTitle }));
                         const { data } = await api.put(`/api/resumes/update`, formData, { headers: { Authorization: token }})
-            setAllResumes(allResumes.map(resume => resume._id === editResumeId ? { ...resume, title } : resume))
-            setTitle('')
+            setAllResumes(allResumes.map(resume => resume._id === editResumeId ? { ...resume, title: editTitle } : resume))
+            setEditTitle('')
             setEditResumeId('')
             toast.success(data.message)
         } catch (error) {
@@ -190,7 +183,7 @@ const Dashboard = () => {
 
               <div onClick={e=> e.stopPropagation()} className="absolute top-1 right-1 group-hover:flex items-center hidden">
                 <TrashIcon onClick={()=> deleteResume(resume._id)} className="size-7 p-1.5 hover:bg-white/50 rounded text-slate-700 transition-colors" />
-                <PencilIcon onClick={()=> {setEditResumeId(resume._id); setTitle(resume.title)}} className="size-7 p-1.5 hover:bg-white/50 rounded text-slate-700 transition-colors" />
+                <PencilIcon onClick={()=> {setEditResumeId(resume._id); setEditTitle(resume.title)}} className="size-7 p-1.5 hover:bg-white/50 rounded text-slate-700 transition-colors" />
               </div>
             </button>
           )
@@ -198,21 +191,21 @@ const Dashboard = () => {
       </div>
 
       {showCreateResume && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => setShowCreateResume(false)}>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => { setShowCreateResume(false); setCreateTitle('') }}>
           <form onSubmit={createResume} onClick={(e) => e.stopPropagation()} className="relative bg-slate-50 border shadow-md rounded-lg w-full max-w-sm p-6">
             <h2 className="text-xl font-bold mb-4">Create a Resume</h2>
-            <input type="text" placeholder="Enter resume title" className="w-full px-4 py-2 mb-4 focus:border-green-600 ring-green-600" required value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input type="text" placeholder="Enter resume title" autoFocus className="w-full px-4 py-2 mb-4 focus:border-green-600 ring-green-600" required value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} />
 
             <button className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">Create Resume</button>
 
             {/* Close button (absolute inside relative container) */}
-            <XIcon className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" onClick={() => { setShowCreateResume(false); setTitle('') }} />
+            <XIcon className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" onClick={() => { setShowCreateResume(false); setCreateTitle('') }} />
           </form>
         </div>
       )}
 
       {showUploadResume && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => setShowUploadResume(false)}>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => { setShowUploadResume(false); setSelectedFile(null); setUploadTitle('') }}>
           <form onSubmit={uploadResume} onClick={(e) => e.stopPropagation()} className="relative bg-slate-50 border shadow-md rounded-lg w-full max-w-sm p-6">
             <h2 className="text-xl font-bold mb-4">Upload Resume</h2>
 
@@ -261,15 +254,15 @@ const Dashboard = () => {
       )}
 
         {editResumeId && (
-            <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => setEditResumeId('')}>
-                <form onSubmit={editTitle} onClick={(e) => e.stopPropagation()} className="relative bg-slate-50 border shadow-md rounded-lg w-full max-w-sm p-6">
-                    <h2 className="text-xl font-bold mb-4">Create a Resume</h2>
-                    <input type="text" placeholder="Enter resume title" className="w-full px-4 py-2 mb-4 focus:border-green-600 ring-green-600" required value={title} onChange={(e) => setTitle(e.target.value)} />
+            <div className="fixed inset-0 bg-black/70 backdrop-blur z-10 flex items-center justify-center" onClick={() => { setEditResumeId(''); setEditTitle('') }}>
+                <form onSubmit={updateTitle} onClick={(e) => e.stopPropagation()} className="relative bg-slate-50 border shadow-md rounded-lg w-full max-w-sm p-6">
+                    <h2 className="text-xl font-bold mb-4">Edit Resume Title</h2>
+                    <input type="text" placeholder="Enter resume title" className="w-full px-4 py-2 mb-4 focus:border-green-600 ring-green-600" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
 
                     <button className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">Update</button>
 
                     {/* Close button (absolute inside relative container) */}
-                    <XIcon className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" onClick={() => { setEditResumeId(''); setTitle('') }} />
+                    <XIcon className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" onClick={() => { setEditResumeId(''); setEditTitle('') }} />
                 </form>
             </div>
         )}

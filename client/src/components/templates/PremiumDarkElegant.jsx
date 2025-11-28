@@ -14,7 +14,12 @@ const PremiumDarkElegant = ({ data = {}, accentColor = '#10B981' }) => {
         <div className="col-span-1 bg-gray-800 p-4 rounded-md">
           <div className="flex flex-col items-center text-center">
             {data.personal_info?.image && (
-              <img src={data.personal_info.image} alt="profile" className="w-28 h-28 rounded-full object-cover mb-3 border-2" style={{borderColor: accentColor}} />
+              <img
+                src={data.personal_info.image}
+                alt="profile"
+                className="w-28 h-28 rounded-full object-cover object-center mb-3 border-2"
+                style={{ borderColor: accentColor }}
+              />
             )}
             <h2 className="text-lg font-semibold" style={{color: accentColor}}>{data.personal_info?.full_name || 'Your Name'}</h2>
             <p className="text-sm text-gray-300">{data.personal_info?.profession}</p>
