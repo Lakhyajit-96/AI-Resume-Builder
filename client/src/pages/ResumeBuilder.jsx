@@ -157,13 +157,6 @@ const ResumeBuilder = () => {
 
     const activeSection = sections[activeSectionIndex]
 
-    useEffect(()=>{
-        const hasProcessableImage = avatarFile || resumeData.personal_info?.image;
-        if(removeBackground && hasProcessableImage){
-            saveResume({ silent: true, forceBackgroundProcessing: true });
-        }
-    },[avatarFile, removeBackground, resumeData.personal_info?.image, saveResume])
-
     const saveResume = useCallback(async ({ silent = false, forceBackgroundProcessing = false } = {})=>{
         if(isSaving) return;
         const token = localStorage.getItem('token');
@@ -233,6 +226,13 @@ const ResumeBuilder = () => {
             setIsSaving(false);
         }
     },[avatarFile, cleanupPreviewUrl, isSaving, removeBackground, resumeData, resumeId])
+
+    useEffect(()=>{
+        const hasProcessableImage = avatarFile || resumeData.personal_info?.image;
+        if(removeBackground && hasProcessableImage){
+            saveResume({ silent: true, forceBackgroundProcessing: true });
+        }
+    },[avatarFile, removeBackground, resumeData.personal_info?.image, saveResume])
 
     const changeResumeVisibility = async () => {
         setResumeData({...resumeData, public: !resumeData.public})
