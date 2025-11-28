@@ -100,8 +100,7 @@ const callGeminiExtraction = async (resumeText) => {
     return JSON.parse(content);
 };
 
-const extractResumeDataWithAI = async (resumeText) => {
-const extractTextFromFile = async (file) => {
+async function extractTextFromFile(file) {
     if (!file) return '';
     const ext = path.extname(file.originalname || '').toLowerCase();
     const buffer = await fs.readFile(file.path);
@@ -114,8 +113,9 @@ const extractTextFromFile = async (file) => {
         return result?.value || '';
     }
     throw new Error('Unsupported file format. Please upload a PDF or DOCX resume.');
-};
+}
 
+const extractResumeDataWithAI = async (resumeText) => {
     if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) {
         return { data: null, source: 'fallback' };
     }

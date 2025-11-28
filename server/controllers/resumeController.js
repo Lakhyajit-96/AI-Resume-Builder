@@ -98,6 +98,19 @@ export const updateResume = async (req, res) => {
             resumeDataCopy.personal_info = {};
         }
 
+        const resume = await Resume.findOne({ _id: resumeId, userId });
+        if (!resume) {
+            return res.status(404).json({ message: 'Resume not found' });
+        }
+
+        const existingImage = resume.personal_info?.image;
+        const personalInfo = resumeDataCopy.personal_info;
+        const userProvidedImageField = Object.prototype.hasOwnProperty.call(personalInfo, 'image');
+
+        if (!userProvidedImageField && typeof existingImage !== 'undefined') {
+            personalInfo.image = existingImage;
+        }
+
         if (image) {
             const imageBufferData = fs.createReadStream(image.path);
             try {
@@ -111,15 +124,22 @@ export const updateResume = async (req, res) => {
                 });
 
                 if (response && response.url) {
-                    resumeDataCopy.personal_info.image = response.url;
+                    personalInfo.image = response.url;
+                } else if (!userProvidedImageField && typeof existingImage !== 'undefined') {
+                    personalInfo.image = existingImage;
                 }
             } catch (uploadErr) {
                 console.warn('Image upload failed, keeping existing avatar:', uploadErr.message || uploadErr);
+                if (!userProvidedImageField && typeof existingImage !== 'undefined') {
+                    personalInfo.image = existingImage;
+                }
             }
+        } else if (!userProvidedImageField && typeof existingImage === 'undefined') {
+            delete personalInfo.image;
         }
 
-        if (!image && typeof resumeDataCopy.personal_info.image === 'undefined') {
-            delete resumeDataCopy.personal_info.image;
+        if (typeof personalInfo.image === 'undefined') {
+            delete personalInfo.image;
         }
 
         delete resumeDataCopy._id;
@@ -128,15 +148,8 @@ export const updateResume = async (req, res) => {
         delete resumeDataCopy.createdAt;
         delete resumeDataCopy.updatedAt;
 
-        const resume = await Resume.findOneAndUpdate(
-            { _id: resumeId, userId },
-            { $set: resumeDataCopy },
-            { new: true, runValidators: true }
-        );
-
-        if (!resume) {
-            return res.status(404).json({ message: 'Resume not found' });
-        }
+        resume.set(resumeDataCopy);
+        await resume.save();
 
         return res.status(200).json({message: 'Saved successfully', resume});
     } catch (error) {
